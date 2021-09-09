@@ -655,6 +655,33 @@ error:
 	return rc;
 }
 
+int dsi_panel_update_doze(struct dsi_panel *panel) {
+	int rc = 0;
+
+	if (panel->doze_enabled) {
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_DOZE_HBM);
+		if (rc)
+			DSI_ERR("[%s] failed to send doze hbm cmd, rc=%d\n",
+					panel->name, rc);
+	} else {
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_DOZE_HBM_NOLP);
+		if (rc)
+			DSI_ERR("[%s] failed to send nolp cmd, rc=%d\n",
+					panel->name, rc);
+	}
+
+	return rc;
+}
+
+int dsi_panel_set_doze_status(struct dsi_panel *panel, bool status) {
+	if (status == panel->doze_enabled)
+		return 0;
+
+	panel->doze_enabled = status;
+
+	return dsi_panel_update_doze(panel);
+}
+
 int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 {
 	int rc = 0;
@@ -3858,6 +3885,7 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	drm_panel_init(&panel->drm_panel);
 	panel->drm_panel.dev = &panel->mipi_device.dev;
 	panel->mipi_device.dev.of_node = of_node;
+	panel->doze_enabled = false;
 
 	rc = drm_panel_add(&panel->drm_panel);
 	if (rc)
@@ -4594,24 +4622,14 @@ int dsi_panel_set_lp1(struct dsi_panel *panel)
 		panel->power_mode != SDE_MODE_DPMS_LP2)
 		dsi_pwr_panel_regulator_mode_set(&panel->power_info,
 			"ibb", REGULATOR_MODE_IDLE);
-	if (panel->mi_cfg.aod_bl_51ctl &&
-		panel->power_mode == SDE_MODE_DPMS_LP2) {
-		mi_disp_handle_lp_event(panel, SDE_MODE_DPMS_LP1);
-		DISP_UTC_INFO("LP2 status, doesn't switch aod status\n");
-	} else {
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP1);
-		if (rc)
-			DSI_ERR("[%s] failed to send DSI_CMD_SET_LP1 cmd, rc=%d\n",
-			       panel->name, rc);
-		else {
-			mi_disp_handle_lp_event(panel, SDE_MODE_DPMS_LP1);
-			if (panel->mi_cfg.panel_id == 0x4B394200420200 || panel->mi_cfg.panel_id == 0x4B394500420200)
-				panel->mi_cfg.aod_brightness_work_flag = true;
-		}
-	}
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP1);
+	if (rc)
+		DSI_ERR("[%s] failed to send DSI_CMD_SET_LP1 cmd, rc=%d\n",
+		       panel->name, rc);
 
-	mi_dsi_panel_state_count(panel, PANEL_ACTIVE, 0);
-	mi_dsi_panel_state_count(panel, PANEL_FPS, 0);
+	rc = dsi_panel_set_doze_status(panel, true);
+	if (rc)
+		DSI_ERR("[%s] unable to set doze on, rc=%d\n", panel->name, rc);
 
 exit:
 	mi_dsi_update_micfg_flags(panel, PANEL_LP1);
@@ -4642,8 +4660,9 @@ int dsi_panel_set_lp2(struct dsi_panel *panel)
 		DSI_ERR("[%s] failed to send DSI_CMD_SET_LP2 cmd, rc=%d\n",
 		       panel->name, rc);
 
-	mi_dsi_panel_state_count(panel, PANEL_ACTIVE, 0);
-	mi_dsi_panel_state_count(panel, PANEL_FPS, 0);
+	rc = dsi_panel_set_doze_status(panel, true);
+	if (rc)
+		DSI_ERR("[%s] unable to set doze on, rc=%d\n", panel->name, rc);
 
 exit:
 	mi_dsi_update_micfg_flags(panel, PANEL_LP2);
@@ -4686,31 +4705,15 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 	     panel->power_mode == SDE_MODE_DPMS_LP2))
 		dsi_pwr_panel_regulator_mode_set(&panel->power_info,
 			"ibb", REGULATOR_MODE_NORMAL);
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP);
+	if (rc)
+		DSI_ERR("[%s] failed to send DSI_CMD_SET_NOLP cmd, rc=%d\n",
+		       panel->name, rc);
 
-	if (is_support_nolp_set_backlight(panel))
-		rc = mi_dsi_panel_nolp_set_backlight(panel);
+	rc = dsi_panel_set_doze_status(panel, false);
+	if (rc)
+		DSI_ERR("[%s] unable to set doze off, rc=%d\n", panel->name, rc);
 
-	if (panel->mi_cfg.aod_nolp_command_enabled) {
-		rc = mi_dsi_panel_nolp(panel);
-	} else {
-		mi_disp_handle_lp_event(panel, SDE_MODE_DPMS_ON);
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP);
-		if (rc)
-			DSI_ERR("[%s] failed to send DSI_CMD_SET_NOLP cmd, rc=%d\n",
-				panel->name, rc);
-
-		if (panel->mi_cfg.panel_id == 0x4B394200420200 || panel->mi_cfg.panel_id == 0x4B394500420200)
-			panel->mi_cfg.aod_brightness_work_flag = false;
-
-		if (panel->mi_cfg.dc_type == 0 &&
-			panel->mi_cfg.feature_val[DISP_FEATURE_DC] == FEATURE_ON &&
-			panel->mi_cfg.panel_id == 0x4B335300420200) {
-			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_AOD_TO_DC_ON);
-			if (rc)
-				pr_err("[%s] failed to send DSI_CMD_SET_MI_AOD_TO_DC_ON, rc=%d\n",
-					panel->name, rc);
-		}
-	}
 exit1:
 	mi_dsi_panel_state_count(panel, PANEL_ACTIVE, 1);
 	mi_dsi_panel_state_count(panel, PANEL_FPS, panel->cur_mode->timing.refresh_rate);
@@ -5220,11 +5223,7 @@ int dsi_panel_disable(struct dsi_panel *panel)
 	}
 	panel->panel_initialized = false;
 	panel->power_mode = SDE_MODE_DPMS_OFF;
-	mi_dsi_update_micfg_flags(panel, PANEL_OFF);
-
-	mi_dsi_panel_state_count(panel, PANEL_ACTIVE, 0);
-	mi_dsi_panel_state_count(panel, PANEL_HBM, 0);
-	mi_dsi_panel_state_count(panel, PANEL_FPS, 0);
+	panel->doze_enabled = false;
 
 	mutex_unlock(&panel->panel_lock);
 	DISP_UTC_INFO("%s panel: DSI_CMD_SET_OFF\n", panel->type);
