@@ -3137,6 +3137,26 @@ END:
 	return count;
 }
 
+#ifdef FTS_FOD_AREA_REPORT
+static ssize_t fts_fod_status_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct fts_ts_info *info = dev_get_drvdata(dev);
+
+	return snprintf(buf, TSP_BUF_SIZE, "%d\n", info->fod_status);
+}
+
+static ssize_t fts_fod_status_store(struct device *dev, struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	struct fts_ts_info *info = dev_get_drvdata(dev);
+
+	sscanf(buf, "%u", &info->fod_status);
+	queue_work(info->event_wq, &info->mode_handler_work);
+
+	return count;
+}
+#endif
+
 static ssize_t fts_doze_time_show(struct device *dev,
 				    struct device_attribute *attr, char *buf)
 {
@@ -3686,6 +3706,11 @@ static DEVICE_ATTR(grip_enable, (S_IRUGO | S_IWUSR | S_IWGRP),
 		   fts_grip_enable_show, fts_grip_enable_store);
 static DEVICE_ATTR(grip_area, (S_IRUGO | S_IWUSR | S_IWGRP),
 		   fts_grip_area_show, fts_grip_area_store);
+
+#ifdef FTS_FOD_AREA_REPORT
+static DEVICE_ATTR(fod_status, (S_IRUGO | S_IWUSR | S_IWGRP),
+		   fts_fod_status_show, fts_fod_status_store);
+#endif
 
 #ifdef GESTURE_MODE
 static DEVICE_ATTR(double_tap, (S_IRUGO | S_IWUSR | S_IWGRP),
@@ -8795,6 +8820,12 @@ static int fts_probe(struct spi_device *client)
 			      &dev_attr_fod_test.attr);
 	if (error) {
 		logError(1, "%s ERROR: Failed to create fod_test sysfs group!\n", tag);
+	}
+	error = 
+	    sysfs_create_file(&info->fts_touch_dev->kobj,
+			      &dev_attr_fod_status.attr);
+	if (error) {
+		logError(1, "%s ERROR: Failed to create fod_status sysfs group!\n", tag);
 	}
 #endif
 #ifdef GESTURE_MODE
