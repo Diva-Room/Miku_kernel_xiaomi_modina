@@ -723,6 +723,8 @@ struct syna_tcm_hcd {
 	struct syna_tcm_xiaomi_board_data xiaomi_board_data;
 	struct mutex long_mode_value_mutex;
 	struct mutex esd_recovery_mutex;
+
+	int double_tap_pressed;
 };
 
 struct syna_tcm_module_cb {

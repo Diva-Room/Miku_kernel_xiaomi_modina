@@ -777,6 +777,33 @@ exit:
 	return 0;
 }
 
+static ssize_t syna_gesture_double_tap_pressed_show(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int double_tap_pressed = 0;
+	struct syna_tcm_hcd *tcm_hcd = touch_hcd->tcm_hcd;
+
+	mutex_lock(&touch_hcd->report_mutex);
+	if (tcm_hcd->wakeup_gesture_enabled) {
+		double_tap_pressed = tcm_hcd->double_tap_pressed;
+	}
+	mutex_unlock(&touch_hcd->report_mutex);
+
+	return snprintf(buf, PAGE_SIZE, "%u\n", double_tap_pressed);
+}
+
+static DEVICE_ATTR(syna_gesture_double_tap_pressed, S_IRUGO,
+		   syna_gesture_double_tap_pressed_show, NULL);
+
+static struct attribute *syna_gesture_attrs[] = {
+	&dev_attr_syna_gesture_double_tap_pressed.attr,
+	NULL,
+};
+
+static struct attribute_group syna_gesture_group = {
+	.attrs = syna_gesture_attrs,
+};
+
 /**
  * touch_report() - Report touch events
  *
@@ -852,10 +879,9 @@ static void touch_report(void)
 	if (tcm_hcd->in_suspend && tcm_hcd->wakeup_gesture_enabled) {
 		if (touch_data->gesture_id == GESTURE_DOUBLE_TAP) {
 			LOGI(tcm_hcd->pdev->dev.parent, "Double TAP Detected\n");
-			input_report_key(touch_hcd->input_dev, KEY_WAKEUP, 1);
-			input_sync(touch_hcd->input_dev);
-			input_report_key(touch_hcd->input_dev, KEY_WAKEUP, 0);
-			input_sync(touch_hcd->input_dev);
+			tcm_hcd->double_tap_pressed = 1;
+			sysfs_notify(&tcm_hcd->syna_tcm_dev->kobj, NULL,
+					"syna_gesture_double_tap_pressed");
 		} else if (touch_data->gesture_id == GESTURE_SINGLE_TAP) {
 			LOGI(tcm_hcd->pdev->dev.parent, "Single TAP Detected\n");
 			input_report_key(touch_hcd->input_dev, KEY_GOTO, 1);
@@ -1354,6 +1380,16 @@ int touch_init(struct syna_tcm_hcd *tcm_hcd)
 		goto err_set_input_reporting;
 	}
 
+	retval = sysfs_create_group(&tcm_hcd->syna_tcm_dev->kobj,
+			&syna_gesture_group);
+	if (retval) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"gesture sys node create fail\n");
+		sysfs_remove_group(&tcm_hcd->syna_tcm_dev->kobj,
+				&syna_gesture_group);
+		return retval;
+	}
+
 	tcm_hcd->report_touch = touch_report;
 
 	return 0;
@@ -1380,6 +1416,9 @@ int touch_remove(struct syna_tcm_hcd *tcm_hcd)
 
 	if (touch_hcd->input_dev)
 		input_unregister_device(touch_hcd->input_dev);
+
+	sysfs_remove_group(&tcm_hcd->syna_tcm_dev->kobj,
+				&syna_gesture_group);
 
 	kfree(touch_hcd->touch_data.object_data);
 	kfree(touch_hcd->prev_status);
