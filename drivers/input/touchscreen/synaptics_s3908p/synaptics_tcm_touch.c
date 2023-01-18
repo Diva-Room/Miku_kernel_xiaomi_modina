@@ -1476,12 +1476,7 @@ int touch_suspend(struct syna_tcm_hcd *tcm_hcd)
 			tcm_hcd->gesture_type &= ~(0x0001<<13);
 		}
 
-		if (tcm_hcd->nonui_status != 1 && tcm_hcd->doubletap_enable)
-			tcm_hcd->gesture_type |= 0x0001;
-		else {
-			/* disable double tap */
-			tcm_hcd->gesture_type &= ~0x0001;
-		}
+		tcm_hcd->gesture_type |= 0x0001;
 
 		LOGI(tcm_hcd->pdev->dev.parent,
 			"set DC_GESTURE_TYPE_ENABLE: 0x%02x\n", tcm_hcd->gesture_type);
