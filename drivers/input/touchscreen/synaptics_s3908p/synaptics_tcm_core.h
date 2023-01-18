@@ -690,7 +690,6 @@ struct syna_tcm_hcd {
 	int nonui_status;
 	bool aod_enable;
 	int fod_status;
-	bool doubletap_enable;
 	int power_status;
 	int charger_connected;
 	int report_rate_mode;
