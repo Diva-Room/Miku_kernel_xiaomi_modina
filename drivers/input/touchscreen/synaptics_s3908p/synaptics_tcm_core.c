@@ -3870,12 +3870,7 @@ static int syna_tcm_early_suspend(struct device *dev)
 		return 0;
 	}
 
-	if (tcm_hcd->fod_enabled == true ||
-			tcm_hcd->aod_enable == true ||
-			tcm_hcd->doubletap_enable == true) {
-		tcm_hcd->wakeup_gesture_enabled = WAKEUP_GESTURE;
-	} else
-		tcm_hcd->wakeup_gesture_enabled = false;
+	tcm_hcd->wakeup_gesture_enabled = WAKEUP_GESTURE;
 
 	if (!tcm_hcd->wakeup_gesture_enabled || tcm_hcd->nonui_status == 2) {
 		if (!tcm_hcd->in_sleep) {
@@ -4677,11 +4672,6 @@ static int syna_tcm_set_cur_value(int mode, int val)
 	}
 
 	switch (mode) {
-	case Touch_Doubletap_Mode:
-		LOGI(tcm_hcd->pdev->dev.parent, "Touch_Doubletap_Mode value [%d]\n", val);
-		/* Bit0: Double Tap; Bit13: Single Tap */
-		tcm_hcd->doubletap_enable = val > 0 ? true : false;
-		break;
 	case Touch_Aod_Enable:
 		LOGI(tcm_hcd->pdev->dev.parent, "Touch_Aod_Enable value [%d]\n", val);
 		tcm_hcd->aod_enable = val > 0 ? true : false;
