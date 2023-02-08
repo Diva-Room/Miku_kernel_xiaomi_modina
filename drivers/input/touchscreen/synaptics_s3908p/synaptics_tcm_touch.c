@@ -196,6 +196,8 @@ static void touch_fod_down_event(void)
 
 	/* Todo: add customer FOD action. */
 	if (!tcm_hcd->fod_display_enabled) {
+		sysfs_notify(&tcm_hcd->syna_tcm_dev->kobj,
+			     NULL, "syna_gesture_fod_pressed");
 		input_report_key(touch_hcd->input_dev, BTN_INFO, 1);
 		input_sync(touch_hcd->input_dev);
 		tcm_hcd->fod_id = FOD_DOWN;
@@ -209,6 +211,8 @@ static void touch_fod_up_event(void)
 {
 	struct syna_tcm_hcd *tcm_hcd = touch_hcd->tcm_hcd;
 
+	sysfs_notify(&tcm_hcd->syna_tcm_dev->kobj,
+		     NULL, "syna_gesture_fod_pressed");
 	LOGI(tcm_hcd->pdev->dev.parent, "FOD UP Detected\n");
 	input_report_key(touch_hcd->input_dev, BTN_INFO, 0);
 	input_mt_slot(touch_hcd->input_dev, tcm_hcd->fod_id);
@@ -777,6 +781,21 @@ exit:
 	return 0;
 }
 
+static ssize_t syna_gesture_fod_pressed_show(
+	struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int fp_pressed = 0;
+	struct syna_tcm_hcd *tcm_hcd = touch_hcd->tcm_hcd;
+
+	mutex_lock(&touch_hcd->report_mutex);
+	if (tcm_hcd->wakeup_gesture_enabled) {
+		fp_pressed = tcm_hcd->fod_finger ? 1 : 0;
+	}
+	mutex_unlock(&touch_hcd->report_mutex);
+
+	return snprintf(buf, PAGE_SIZE, "%u\n", fp_pressed);
+}
+
 static ssize_t syna_gesture_double_tap_pressed_show(
 	struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -792,10 +811,14 @@ static ssize_t syna_gesture_double_tap_pressed_show(
 	return snprintf(buf, PAGE_SIZE, "%u\n", double_tap_pressed);
 }
 
+static DEVICE_ATTR(syna_gesture_fod_pressed, S_IRUGO,
+		   syna_gesture_fod_pressed_show, NULL);
+
 static DEVICE_ATTR(syna_gesture_double_tap_pressed, S_IRUGO,
 		   syna_gesture_double_tap_pressed_show, NULL);
 
 static struct attribute *syna_gesture_attrs[] = {
+	&dev_attr_syna_gesture_fod_pressed.attr,
 	&dev_attr_syna_gesture_double_tap_pressed.attr,
 	NULL,
 };
