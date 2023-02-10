@@ -655,31 +655,20 @@ error:
 	return rc;
 }
 
-int dsi_panel_update_doze(struct dsi_panel *panel) {
-	int rc = 0;
-
-	if (panel->doze_enabled) {
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_DOZE_HBM);
-		if (rc)
-			DSI_ERR("[%s] failed to send doze hbm cmd, rc=%d\n",
-					panel->name, rc);
-	} else {
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_DOZE_HBM_NOLP);
-		if (rc)
-			DSI_ERR("[%s] failed to send nolp cmd, rc=%d\n",
-					panel->name, rc);
-	}
-
-	return rc;
-}
-
 int dsi_panel_set_doze_status(struct dsi_panel *panel, bool status) {
-	if (status == panel->doze_enabled)
-		return 0;
+    int rc = 0;
 
-	panel->doze_enabled = status;
+    if (status == panel->doze_enabled)
+        return 0;
 
-	return dsi_panel_update_doze(panel);
+    panel->doze_enabled = status;
+
+    rc = dsi_panel_tx_cmd_set(panel, panel->doze_enabled ? DSI_CMD_SET_MI_DOZE_HBM : DSI_CMD_SET_MI_DOZE_HBM_NOLP);
+    if (rc)
+        DSI_ERR("[%s] failed to send %s cmd, rc=%d\n",
+                panel->name, panel->doze_enabled ? "doze hbm" : "nolp", rc);
+
+    return rc;
 }
 
 int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
