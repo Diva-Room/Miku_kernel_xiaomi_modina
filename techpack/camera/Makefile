@@ -92,6 +92,11 @@ LINUXINCLUDE    += \
 		-include $(srctree)/techpack/camera/config/sm6150cameraconf.h
 endif
 
+ifeq ($(TARGET_PRODUCT), odin)
+LINUXINCLUDE    += \
+		-include $(srctree)/techpack/camera/config/odincameraconf.h
+endif
+
 endif
 
 ifneq (,$(filter $(CONFIG_SPECTRA_CAMERA), y m))
