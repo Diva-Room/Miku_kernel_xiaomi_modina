@@ -30,7 +30,11 @@
 #include "cam_compat.h"
 #include "cam_cpas_hw.h"
 
+#ifdef TARGET_PRODUCT_ODIN
+#define CAM_REQ_MGR_EVENT_MAX 120
+#else
 #define CAM_REQ_MGR_EVENT_MAX 150
+#endif
 
 static struct cam_req_mgr_device g_dev;
 struct kmem_cache *g_cam_req_mgr_timer_cachep;
