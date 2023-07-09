@@ -3796,6 +3796,7 @@ mod_resume:
 
 exit:
 	tcm_hcd->in_sleep = false;
+	touch_free_objects(tcm_hcd);
 	tcm_hcd->in_suspend = false;
 
 	return retval;

@@ -2472,6 +2472,11 @@ static int testing_self_test(char *buf)
 exit:
 	LOGN(tcm_hcd->pdev->dev.parent,
 		"Panel Test Result = %s\n", (testing_hcd->result)?"pass":"fail");
+	if (save_buf) {
+		kfree(save_buf);
+		save_buf = NULL;
+	}
+	
 	return retval;
 }
 

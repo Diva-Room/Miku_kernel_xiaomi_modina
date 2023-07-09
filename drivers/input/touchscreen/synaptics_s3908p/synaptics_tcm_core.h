@@ -566,11 +566,6 @@ struct syna_grip_zone {
 	struct syna_zone corner_zone;
 };
 
-enum FOD_STATUS {
-	FOD_DOWN = 100,
-	FOD_UP   = 101
-};
-
 struct syna_tcm_hcd {
 	struct regulator *avdd;
 	struct regulator *iovdd;
