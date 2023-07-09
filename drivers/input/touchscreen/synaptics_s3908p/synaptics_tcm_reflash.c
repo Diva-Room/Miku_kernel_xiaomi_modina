@@ -1018,7 +1018,7 @@ static enum update_area reflash_compare_id_info(void)
 				"Image firmware ID not equal device firmware ID\n");
 		update_area = FIRMWARE_CONFIG;
 		goto exit;
-	} else if (image_fw_id < device_fw_id) {
+	} else {
 		LOGE(tcm_hcd->pdev->dev.parent,
 				"Image firmware ID older than device firmware ID\n");
 		update_area = NONE;
@@ -1029,12 +1029,12 @@ static enum update_area reflash_compare_id_info(void)
 	device_config_id = tcm_hcd->app_info.customer_config_id;
 
 	for (idx = 0; idx < 16; idx++) {
-		if (image_config_id[idx] > device_config_id[idx]) {
+		if (image_config_id[idx] != device_config_id[idx]) {
 			LOGE(tcm_hcd->pdev->dev.parent,
 					"Image config ID newer than device config ID\n");
 			update_area = CONFIG_ONLY;
 			goto exit;
-		} else if (image_config_id[idx] < device_config_id[idx]) {
+		} else {
 			LOGE(tcm_hcd->pdev->dev.parent,
 					"Image config ID older than device config ID\n");
 			update_area = NONE;
