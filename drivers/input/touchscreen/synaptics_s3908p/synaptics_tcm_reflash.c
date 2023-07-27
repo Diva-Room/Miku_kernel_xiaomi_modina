@@ -36,6 +36,7 @@
 
 #include <linux/crc32.h>
 #include <linux/firmware.h>
+#include <linux/hwid.h>
 #include "synaptics_tcm_core.h"
 
 #define STARTUP_REFLASH
@@ -44,7 +45,7 @@
 #define SYSFS_DIR_NAME				"reflash"
 #define CUSTOM_DIR_NAME				"custom"
 #define FW_IMAGE_NAME				"s3908p_xiaomi_k9b_spi.img"
-#define FW_IMAGE_NAME_MANUAL		"s3908p_xiaomi_k9b_spi.img"
+#define FW_IMAGE_NAME_1S		    "s3908p_xiaomi_k9e_spi.img"
 #define BOOT_CONFIG_ID				"BOOT_CONFIG"
 #define APP_CODE_ID					"APP_CODE"
 #define PROD_TEST_ID				"APP_PROD_TEST"
@@ -929,32 +930,37 @@ static int reflash_parse_fw_image(void)
 
 static int reflash_get_fw_image(void)
 {
+	const char *fw_image_name = FW_IMAGE_NAME;
 	int retval;
 	struct syna_tcm_hcd *tcm_hcd = reflash_hcd->tcm_hcd;
 
 	LOGE(tcm_hcd->pdev->dev.parent, "-----enter-----%s\n", __func__);
 	/* reflash_hcd->reflash_by_manual=false; */
 
+	if (get_hw_version_platform() == HARDWARE_PROJECT_K9E) {
+		fw_image_name = FW_IMAGE_NAME_1S; // Load zijin touchscreen firmware
+	}
+
 	if (reflash_hcd->image == NULL) {
 		if (reflash_hcd->reflash_by_manual == false) {
 
 			retval = request_firmware(&reflash_hcd->fw_entry,
-				FW_IMAGE_NAME, tcm_hcd->pdev->dev.parent);
+				fw_image_name, tcm_hcd->pdev->dev.parent);
 			if (retval < 0) {
 				LOGE(tcm_hcd->pdev->dev.parent,
 						"Failed to request %s\n",
-						FW_IMAGE_NAME);
+						fw_image_name);
 				return retval;
 			}
 
 		} else {
 			retval = request_firmware(&reflash_hcd->fw_entry,
-						FW_IMAGE_NAME_MANUAL,
+						fw_image_name,
 						tcm_hcd->pdev->dev.parent);
 			if (retval < 0) {
 				LOGE(tcm_hcd->pdev->dev.parent,
 						"Failed to request %s\n",
-						FW_IMAGE_NAME_MANUAL);
+						fw_image_name);
 				return retval;
 			}
 		}
