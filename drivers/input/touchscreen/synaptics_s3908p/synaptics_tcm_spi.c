@@ -704,6 +704,9 @@ static struct of_device_id syna_tcm_of_match_table[] = {
 	{
 		.compatible = "synaptics,tcm-spi",
 	},
+	{
+		.compatible = "xiaomi,k9e-spi",
+	},
 	{},
 };
 MODULE_DEVICE_TABLE(of, syna_tcm_of_match_table);
