@@ -85,6 +85,8 @@
 
 #define RMI_UBL_FN_NUMBER 0x35
 
+#define TS_ID_DET (336+96)
+
 /* #define GRIP_MODE_DEBUG */
 
 #define SYNA_GAME_MODE_ARRAY		"synaptics,game-mode-array"
@@ -6571,6 +6573,17 @@ static struct platform_driver syna_tcm_driver = {
 static int __init syna_tcm_module_init(void)
 {
 	int retval;
+
+	int gpio_96;
+	gpio_direction_input(TS_ID_DET);
+	gpio_96 = gpio_get_value(TS_ID_DET);
+	pr_info("gpio_96 = %d\n",gpio_96);
+	if(gpio_96){
+		pr_info("TP is synaptics");
+	}else{
+		pr_info("TP is goodix");
+		return 0;
+	}
 
 	retval = syna_tcm_bus_init();
 	if (retval < 0)
