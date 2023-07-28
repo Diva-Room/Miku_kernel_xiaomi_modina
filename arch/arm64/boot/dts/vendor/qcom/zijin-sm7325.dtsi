@@ -85,8 +85,8 @@ And public attribution of xiaomi platforms
 	status = "ok";
 	qcom,rt;
 	pinctrl-1 = <&qupv3_se13_spi_sleep &qupv3_se13_spi_sleep_cs>;
-	xiaomi_ts_touch@0 {
-		compatible = "xiaomi,ts-spi";
+	xiaomi_k9e_touch@0 {
+		compatible = "xiaomi,k9e-spi";
 		reg = <0>;
 		spi-max-frequency = <20000000>;
 		interrupt-parent = <&tlmm>;
@@ -167,6 +167,18 @@ And public attribution of xiaomi platforms
 				<1 2 0 0 40 2399 0 0>,
 				<1 3 1039 0 1079 2399 0 0>;
 		synaptics,panel-display-resolution = <1079 2399>;  /* X  Y*/
+		goodix,irq-gpio = <&tlmm 81 0x2808>;
+		goodix,reset-gpio = <&tlmm 105 0x00>;
+		goodix,irq-flags = <2>;
+		goodix,panel-max-x = <10800>;
+		goodix,panel-max-y = <24000>;
+		goodix,panel-max-w = <255>;
+		goodix,panel-max-p = <4096>;
+		goodix,firmware-name = "goodix_firmware_k9e.bin";
+		goodix,config-name = "goodix_cfg_group_k9e.bin";
+		goodix,avdd-name = "avdd";
+		goodix,iovdd-name = "vdd";
+		vdd-supply = <&L2C>;
 	};
 };
 
