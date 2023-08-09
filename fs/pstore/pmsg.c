@@ -7,11 +7,10 @@
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
-#include <linux/rtmutex.h>
 #include <linux/uio.h>
 #include "internal.h"
 
-static DEFINE_RT_MUTEX(pmsg_lock);
+static DEFINE_MUTEX(pmsg_lock);
 
 #define LOGGER_MAGIC		'l'
 #define LOG_ID_EVENTS		2
@@ -66,9 +65,9 @@ static ssize_t pmsg_write(char *buf, size_t count)
 	record.size = count;
 	record.buf = buf;
 
-	rt_mutex_lock(&pmsg_lock);
+	mutex_lock(&pmsg_lock);
 	ret = psinfo->write(&record);
-	rt_mutex_unlock(&pmsg_lock);
+	mutex_unlock(&pmsg_lock);
 	return ret ? ret : count;
 }
 
@@ -81,9 +80,9 @@ static ssize_t pmsg_write_user(const char __user *buf, size_t count)
 	record.type = PSTORE_TYPE_PMSG;
 	record.size = count;
 
-	rt_mutex_lock(&pmsg_lock);
+	mutex_lock(&pmsg_lock);
 	ret = psinfo->write_user(&record, buf);
-	rt_mutex_unlock(&pmsg_lock);
+	mutex_unlock(&pmsg_lock);
 	return ret ? ret : count;
 }
 
