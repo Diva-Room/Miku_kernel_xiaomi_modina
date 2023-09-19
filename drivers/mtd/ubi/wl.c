@@ -1286,7 +1286,6 @@ int ubi_wl_put_peb(struct ubi_device *ubi, int vol_id, int lnum,
 retry:
 	spin_lock(&ubi->wl_lock);
 	e = ubi->lookuptbl[pnum];
-	e->sqnum = UBI_UNKNOWN;
 	if (!e) {
 		/*
 		 * This wl entry has been removed for some errors by other
@@ -1299,10 +1298,8 @@ retry:
 		up_read(&ubi->fm_protect);
 		return 0;
 	}
-	if (e == ubi->move_from) {
-		/*
+	e->sqnum = UBI_UNKNOWN;
 		 * User is putting the physical eraseblock which was selected to
-		 * be moved. It will be scheduled for erasure in the
 		 * wear-leveling worker.
 		 */
 		dbg_wl("PEB %d is being moved, wait", pnum);
