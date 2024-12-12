@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -10789,23 +10789,6 @@ csr_cm_roam_fill_11w_params(struct mac_context *mac_ctx,
 	}
 }
 
-#ifdef WLAN_FEATURE_ROAM_OFFLOAD
-static void
-csr_cm_roam_fill_rsn_caps(struct mac_context *mac, uint8_t vdev_id,
-			  uint16_t *rsn_caps)
-{
-	tCsrRoamConnectedProfile *profile;
-
-	/* Copy the self RSN capabilities in roam offload request */
-	profile = &mac->roam.roamSession[vdev_id].connectedProfile;
-	*rsn_caps &= ~WLAN_CRYPTO_RSN_CAP_MFP_ENABLED;
-	*rsn_caps &= ~WLAN_CRYPTO_RSN_CAP_MFP_REQUIRED;
-	if (profile->MFPRequired)
-		*rsn_caps |= WLAN_CRYPTO_RSN_CAP_MFP_REQUIRED;
-	if (profile->MFPCapable)
-		*rsn_caps |= WLAN_CRYPTO_RSN_CAP_MFP_ENABLED;
-}
-#endif
 #else
 static inline
 void csr_update_pmf_cap_from_profile(struct csr_roam_profile *profile,
@@ -10817,13 +10800,6 @@ void csr_cm_roam_fill_11w_params(struct mac_context *mac_ctx,
 				 uint8_t vdev_id,
 				 struct ap_profile_params *req)
 {}
-
-#ifdef WLAN_FEATURE_ROAM_OFFLOAD
-static inline
-void csr_cm_roam_fill_rsn_caps(struct mac_context *mac, uint8_t vdev_id,
-			       uint16_t *rsn_caps)
-{}
-#endif
 #endif
 
 QDF_STATUS csr_fill_filter_from_vdev_crypto(struct mac_context *mac_ctx,
@@ -10846,7 +10822,7 @@ QDF_STATUS csr_fill_filter_from_vdev_crypto(struct mac_context *mac_ctx,
 	filter->ucastcipherset =
 		wlan_crypto_get_param(vdev, WLAN_CRYPTO_PARAM_UCAST_CIPHER);
 	filter->key_mgmt =
-		wlan_crypto_get_param(vdev, WLAN_CRYPTO_PARAM_KEY_MGMT);
+		wlan_crypto_get_param(vdev, WLAN_CRYPTO_PARAM_ORIG_KEY_MGMT);
 	filter->mgmtcipherset =
 		wlan_crypto_get_param(vdev, WLAN_CRYPTO_PARAM_MGMT_CIPHER);
 
@@ -15028,9 +15004,7 @@ QDF_STATUS csr_send_join_req_msg(struct mac_context *mac, uint32_t sessionId,
 	struct wlan_objmgr_vdev *vdev;
 	bool follow_ap_edca;
 	bool reconn_after_assoc_timeout = false;
-	uint8_t programmed_country[REG_ALPHA2_LEN + 1];
 	enum reg_6g_ap_type power_type_6g;
-	bool ctry_code_match;
 	uint8_t reg_cc[REG_ALPHA2_LEN + 1];
 
 	if (!pSession) {
@@ -15839,18 +15813,12 @@ QDF_STATUS csr_send_join_req_msg(struct mac_context *mac, uint32_t sessionId,
 		if (wlan_reg_is_6ghz_chan_freq(pBssDescription->chan_freq)) {
 			if (!pIes->Country.present)
 				sme_debug("Channel is 6G but country IE not present");
-			wlan_reg_read_current_country(mac->psoc,
-						      programmed_country);
-			status = wlan_reg_get_6g_power_type_for_ctry(mac->psoc,
-					mac->pdev,
-					pIes->Country.country,
-					programmed_country, &power_type_6g,
-					&ctry_code_match,
-					ap_6g_power_type);
+			status = wlan_reg_get_best_6g_power_type(mac->psoc,
+					mac->pdev, &power_type_6g,
+					ap_6g_power_type, pBssDescription->chan_freq);
 			if (QDF_IS_STATUS_ERROR(status))
 				break;
-			csr_join_req->ap_power_type_6g = power_type_6g;
-			csr_join_req->same_ctry_code = ctry_code_match;
+			csr_join_req->best_6g_power_type = power_type_6g;
 
 			status = csr_iterate_triplets(pIes->Country);
 		}
@@ -17577,6 +17545,8 @@ static void csr_update_score_params(struct mac_context *mac_ctx,
 	req_score_params->bw_weightage = weight_config->chan_width_weightage;
 	req_score_params->band_weightage = weight_config->chan_band_weightage;
 	req_score_params->nss_weightage = weight_config->nss_weightage;
+	req_score_params->security_weightage =
+					weight_config->security_weightage;
 	req_score_params->esp_qbss_weightage =
 		weight_config->channel_congestion_weightage;
 	req_score_params->beamforming_weightage =
@@ -17598,6 +17568,8 @@ static void csr_update_score_params(struct mac_context *mac_ctx,
 	req_score_params->nss_index_score =
 		score_config->nss_weight_per_index;
 
+	req_score_params->security_index_score =
+		score_config->security_weight_per_index;
 	req_score_params->vendor_roam_score_algorithm =
 			score_config->vendor_roam_score_algorithm;
 
@@ -17882,6 +17854,29 @@ csr_cm_roam_scan_offload_rssi_thresh(struct mac_context *mac_ctx,
 	else
 		params->hi_rssi_scan_rssi_delta =
 			roam_info->cfgParams.hi_rssi_scan_rssi_delta;
+	/*
+	 * When the STA operating band is 2.4/5 GHz and if the high RSSI delta
+	 * is configured through vendor command then the priority should be
+	 * given to it and the high RSSI delta value will be overridden with it.
+	 */
+	if (!WLAN_REG_IS_6GHZ_CHAN_FREQ(session->connectedProfile.op_freq)) {
+		uint8_t roam_high_rssi_delta;
+
+		roam_high_rssi_delta =
+		wlan_cm_get_roam_scan_high_rssi_offset(mac_ctx->psoc);
+		if (roam_high_rssi_delta)
+			params->hi_rssi_scan_rssi_delta =
+						roam_high_rssi_delta;
+		/*
+		 * Firmware will use this flag to enable 5 to 6 GHz
+		 * high RSSI roam
+		 */
+		if (roam_high_rssi_delta &&
+		    WLAN_REG_IS_5GHZ_CH_FREQ(session->connectedProfile.op_freq))
+			params->flags |=
+			ROAM_SCAN_RSSI_THRESHOLD_FLAG_ROAM_HI_RSSI_EN_ON_5G;
+	}
+
 	params->hi_rssi_scan_rssi_ub =
 		roam_info->cfgParams.hi_rssi_scan_rssi_ub;
 	params->raise_rssi_thresh_5g =
@@ -17976,7 +17971,9 @@ csr_cm_roam_fill_crypto_params(struct mac_context *mac_ctx,
 			       struct ap_profile *profile)
 {
 	struct wlan_objmgr_vdev *vdev;
-	int32_t uccipher, authmode, mccipher, akm;
+	int32_t uccipher, authmode, mccipher, akm, key_mgmt;
+	int32_t num_allowed_authmode = 0;
+	enum wlan_crypto_key_mgmt i;
 
 	vdev = wlan_objmgr_get_vdev_by_id_from_psoc(mac_ctx->psoc,
 						    session->vdev_id,
@@ -18000,6 +17997,25 @@ csr_cm_roam_fill_crypto_params(struct mac_context *mac_ctx,
 
 	/* Group cipher suite */
 	profile->rsn_mcastcipherset = cm_crypto_cipher_wmi_cipher(mccipher);
+
+	/* Get keymgmt from self security info */
+	key_mgmt = wlan_crypto_get_param(vdev, WLAN_CRYPTO_PARAM_ORIG_KEY_MGMT);
+
+	for (i = 0; i < WLAN_CRYPTO_KEY_MGMT_MAX; i++) {
+		/*
+		 * Send AKM in allowed list which are not present in connected
+		 * akm
+		 */
+		if (QDF_HAS_PARAM(key_mgmt, i) &&
+		    num_allowed_authmode < WLAN_CRYPTO_AUTH_MAX) {
+			profile->allowed_authmode[num_allowed_authmode++] =
+			cm_crypto_authmode_to_wmi_authmode(authmode,
+							   (key_mgmt & (1 << i)),
+							   uccipher);
+		}
+	}
+
+	profile->num_allowed_authmode = num_allowed_authmode;
 }
 
 /**
@@ -18474,6 +18490,37 @@ csr_cm_fill_rso_sae_single_pmk_info(struct mac_context *mac_ctx,
 	return false;
 }
 #endif
+
+QDF_STATUS wlan_cm_roam_scan_offload_rssi_thresh(
+		struct wlan_objmgr_psoc *psoc, uint8_t vdev_id,
+		struct wlan_roam_offload_scan_rssi_params *roam_rssi_params)
+{
+	struct csr_roam_session *session;
+	struct mac_context *mac_ctx;
+
+	mac_ctx = sme_get_mac_context();
+	if (!mac_ctx) {
+		sme_err("mac_ctx is NULL");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	session = CSR_GET_SESSION(mac_ctx, vdev_id);
+	if (!session) {
+		sme_err("session is null %d", vdev_id);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	if (WLAN_REG_IS_6GHZ_CHAN_FREQ(session->connectedProfile.op_freq)) {
+		sme_err("vdev:%d High RSSI offset can't be set in 6 GHz band",
+			 vdev_id);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	csr_cm_roam_scan_offload_rssi_thresh(mac_ctx, session,
+					     roam_rssi_params);
+
+	return QDF_STATUS_SUCCESS;
+}
 #endif
 
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
@@ -18558,6 +18605,8 @@ static QDF_STATUS csr_cm_roam_scan_offload_fill_lfr3_config(
 	uint16_t rsn_caps = 0;
 	tpCsrNeighborRoamControlInfo roam_info =
 		&mac->roam.neighborRoamInfo[vdev_id];
+	struct wlan_objmgr_vdev *vdev;
+	int32_t crypto_rsn = 0;
 
 	rso_config->roam_offload_enabled =
 		mac->mlme_cfg->lfr.lfr3_roaming_offload;
@@ -18622,16 +18671,30 @@ static QDF_STATUS csr_cm_roam_scan_offload_fill_lfr3_config(
 		(uint16_t)((val >> WNI_CFG_BLOCK_ACK_ENABLED_IMMEDIATE) & 1);
 	final_caps_val = (uint16_t *)&self_caps;
 
-	/*
-	 * Self rsn caps aren't sent to firmware, so in case of PMF required,
-	 * the firmware connects to a non PMF AP advertising PMF not required
-	 * in the re-assoc request which violates protocol.
-	 * So send self RSN caps to firmware in roam SCAN offload command to
-	 * let it configure the params in the re-assoc request too.
-	 * Instead of making another infra, send the RSN-CAPS in MSB of
-	 * beacon Caps.
-	 */
-	csr_cm_roam_fill_rsn_caps(mac, vdev_id, &rsn_caps);
+	vdev = wlan_objmgr_get_vdev_by_id_from_psoc(mac->psoc,
+						    vdev_id,
+						    WLAN_LEGACY_SME_ID);
+	if (vdev) {
+		/*
+		 * Self rsn caps aren't sent to firmware, so in case of PMF
+		 * required, the firmware connects to a non PMF AP advertising
+		 * PMF not required in the re-assoc request which violates
+		 * protocol. So send self RSN caps to firmware in roam SCAN
+		 * offload command to let it configure the params in the
+		 * re-assoc request too. Instead of making another infra, send
+		 * the RSN-CAPS in MSB of beacon Caps.
+		 */
+		crypto_rsn =
+			wlan_crypto_get_param(vdev,
+					      WLAN_CRYPTO_PARAM_ORIG_RSN_CAP);
+		if (crypto_rsn < 0)
+			sme_err("Invalid RSN capabilities");
+		else
+			rsn_caps = (uint16_t)crypto_rsn;
+
+		wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_SME_ID);
+	}
+
 	rso_config->rso_lfr3_caps.capability =
 		(rsn_caps << RSN_CAPS_SHIFT) | ((*final_caps_val) & 0xFFFF);
 
