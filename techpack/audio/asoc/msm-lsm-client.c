@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/init.h>
 #include <linux/err.h>
@@ -830,6 +830,13 @@ static int msm_lsm_reg_model(struct snd_pcm_substream *substream,
 
 		q6lsm_sm_set_param_data(client, p_info, &offset, sm);
 
+		if ((sm->size - offset) < p_info->param_size) {
+			dev_err(rtd->dev, "%s: user buff size is greater than expected\n",
+				__func__);
+			rc = -EINVAL;
+			goto err_copy;
+		}
+
 		/*
 		 * For set_param, advance the sound model data with the
 		 * number of bytes required by param_data.
@@ -879,6 +886,13 @@ static int msm_lsm_dereg_model(struct snd_pcm_substream *substream,
 
 	if (p_info->model_id != 0 &&
 		p_info->param_type == LSM_DEREG_MULTI_SND_MODEL) {
+
+		if(list_empty(&client->stage_cfg[p_info->stage_idx].sound_models)) {
+				 pr_err("%s: sound_models list is empty \n",
+                                 __func__);
+				 return -EINVAL;
+		}
+
 		list_for_each_entry(sm,
 				   &client->stage_cfg[p_info->stage_idx].sound_models,
 				   list) {
@@ -2379,8 +2393,13 @@ static int msm_lsm_ioctl_compat(struct snd_pcm_substream *substream,
 			prtd->lsm_client->get_param_payload = NULL;
 			goto done;
 		}
+		if (__builtin_uadd_overflow(sizeof(p_info_32), p_info_32.param_size, &size)) {
+			pr_err("%s: param size exceeds limit of %u bytes.\n",
+				__func__, UINT_MAX);
+			err = -EINVAL;
+			goto done;
+		}
 
-		size = sizeof(p_info_32) + p_info_32.param_size;
 		param_info_rsp = kzalloc(size, GFP_KERNEL);
 
 		if (!param_info_rsp) {
