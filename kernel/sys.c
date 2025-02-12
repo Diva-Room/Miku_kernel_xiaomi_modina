@@ -1264,6 +1264,7 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 	struct new_utsname tmp;
 	struct task_struct *t;
 	bool is_gms = false;
+	bool is_netmgrd = false;
 
 	down_read(&uts_sem);
 	memcpy(&tmp, utsname(), sizeof(tmp));
@@ -1273,13 +1274,14 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 	for_each_thread(current, t) {
 		if (thread_group_leader(t)) {
 			is_gms = !strcmp(t->comm, "id.gms.unstable");
+			is_netmgrd = !strcmp(t->comm, "netmgrd");
 			break;
 		}
 	}
 	rcu_read_unlock();
 
-	if (is_gms)
-		snprintf(tmp.release, sizeof(tmp.release), "%u.%u.%u",
+	if (is_gms || is_netmgrd)
+		snprintf(tmp.release, sizeof(tmp.release), "%u.%u.%u-qgki",
 			 ((LINUX_VERSION_CODE >> 16) & 0x0ff), ((LINUX_VERSION_CODE >> 8) & 0xff),
 			 (LINUX_VERSION_CODE & 0xffff));
 
