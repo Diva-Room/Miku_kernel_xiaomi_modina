@@ -3771,9 +3771,14 @@ read_again:
 			/* Data payload copied into SKB, page ready for recycle */
 			page_pool_recycle_direct(rx_q->page_pool, buf->page);
 			buf->page = NULL;
-		} else if (buf1_len) {
+		} else {
+			unsigned int buf_len = len - prev_len;
+
+			if (likely(status & rx_not_ls))
+				buf_len = priv->dma_buf_sz;
+
 			dma_sync_single_for_cpu(GET_MEM_PDEV_DEV, buf->addr,
-						buf1_len, DMA_FROM_DEVICE);
+						buf_len, DMA_FROM_DEVICE);
 			skb_add_rx_frag(skb, skb_shinfo(skb)->nr_frags,
 					buf->page, 0, buf1_len,
 					priv->dma_buf_sz);
@@ -3783,9 +3788,9 @@ read_again:
 			buf->page = NULL;
 		}
 
-		if (buf2_len) {
+		if (sec_len > 0) {
 			dma_sync_single_for_cpu(GET_MEM_PDEV_DEV, buf->sec_addr,
-						buf2_len, DMA_FROM_DEVICE);
+						sec_len, DMA_FROM_DEVICE);
 			skb_add_rx_frag(skb, skb_shinfo(skb)->nr_frags,
 					buf->sec_page, 0, buf2_len,
 					priv->dma_buf_sz);

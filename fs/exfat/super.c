@@ -195,6 +195,8 @@ static int exfat_show_options(struct seq_file *m, struct dentry *root)
 		seq_puts(m, ",sys_tz");
 	else if (opts->time_offset)
 		seq_printf(m, ",time_offset=%d", opts->time_offset);
+	if (opts->zero_size_dir)
+		seq_puts(m, ",zero_size_dir");
 	return 0;
 }
 
@@ -278,6 +280,7 @@ enum {
 	Opt_keep_last_dots,
 	Opt_sys_tz,
 	Opt_time_offset,
+	Opt_zero_size_dir,
 
 	/* Deprecated options */
 	Opt_utf8,
@@ -323,6 +326,7 @@ static const struct fs_parameter_spec exfat_param_specs[] = {
 	fsparam_flag("keep_last_dots",		Opt_keep_last_dots),
 	fsparam_flag("sys_tz",			Opt_sys_tz),
 	fsparam_s32("time_offset",		Opt_time_offset),
+	fsparam_flag("zero_size_dir",		Opt_zero_size_dir),
 	__fsparam(NULL, "utf8",			Opt_utf8, fs_param_deprecated,
 		  NULL),
 	__fsparam(NULL, "debug",		Opt_debug, fs_param_deprecated,
@@ -403,6 +407,9 @@ static int exfat_parse_param(struct fs_context *fc, struct fs_parameter *param)
 			return -EINVAL;
 		opts->time_offset = result.int_32;
 		break;
+	case Opt_zero_size_dir:
+		opts->zero_size_dir = true;
+		break;
 	case Opt_utf8:
 	case Opt_debug:
 	case Opt_namecase:
@@ -435,6 +442,7 @@ enum {
 	Opt_debug,
 	Opt_namecase,
 	Opt_codepage,
+	Opt_zero_size_dir,
 	Opt_fs,
 };
 
@@ -454,6 +462,7 @@ static const match_table_t exfat_tokens = {
 	{Opt_namecase, "namecase=%u"},
 	{Opt_debug, "debug"},
 	{Opt_utf8, "utf8"},
+	{Opt_zero_size_dir, "zero_size_dir"},
 	{Opt_err, NULL}
 };
 
@@ -545,11 +554,14 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 			case Opt_namecase:
 			case Opt_codepage:
 				break;
+			case Opt_zero_size_dir:
+				opts->zero_size_dir = true;
+				break;
 			default:
 				if (!silent) {
-					exfat_msg(sb, KERN_ERR,
-							"unrecognized mount option \"%s\" or missing value",
-							p);
+					exfat_err(sb,
+						  "unrecognized mount option \"%s\" or missing value",
+						  p);
 				}
 				return -EINVAL;
 		}
@@ -559,14 +571,21 @@ out:
 	if (opts->allow_utime == -1)
 		opts->allow_utime = ~opts->fs_dmask & (0022);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
+	if (opts->discard && !bdev_max_discard_sectors(sb->s_bdev)) {
+		exfat_warn(sb, "mounting with \"discard\" option, but the device does not support discard");
+		opts->discard = 0;
+	}
+#else
 	if (opts->discard) {
 		struct request_queue *q = bdev_get_queue(sb->s_bdev);
 
-		if (!blk_queue_discard(q))
-			exfat_msg(sb, KERN_WARNING,
-					"mounting with \"discard\" option, but the device does not support discard");
-		opts->discard = 0;
+		if (!blk_queue_discard(q)) {
+			exfat_warn(sb, "mounting with \"discard\" option, but the device does not support discard");
+			opts->discard = 0;
+		}
 	}
+#endif
 
 	return 0;
 }
@@ -621,25 +640,33 @@ static int exfat_read_root(struct inode *inode)
 	inode->i_version++;
 #endif
 	inode->i_generation = 0;
-	inode->i_mode = exfat_make_mode(sbi, ATTR_SUBDIR, 0777);
+	inode->i_mode = exfat_make_mode(sbi, EXFAT_ATTR_SUBDIR, 0777);
 	inode->i_op = &exfat_dir_inode_operations;
 	inode->i_fop = &exfat_dir_operations;
 
-	inode->i_blocks = ((i_size_read(inode) + (sbi->cluster_size - 1)) &
-		~((loff_t)sbi->cluster_size - 1)) >> inode->i_blkbits;
+	inode->i_blocks = round_up(i_size_read(inode), sbi->cluster_size) >> 9;
 	ei->i_pos = ((loff_t)sbi->root_dir << 32) | 0xffffffff;
 	ei->i_size_aligned = i_size_read(inode);
 	ei->i_size_ondisk = i_size_read(inode);
 
-	exfat_save_attr(inode, ATTR_SUBDIR);
+	exfat_save_attr(inode, EXFAT_ATTR_SUBDIR);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
+	ei->i_crtime = simple_inode_init_ts(inode);
+	exfat_truncate_inode_atime(inode);
+#else
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+	inode->i_mtime = inode->i_atime = ei->i_crtime = inode_set_ctime_current(inode);
+#else
 	inode->i_mtime = inode->i_atime = inode->i_ctime = ei->i_crtime =
 		current_time(inode);
+#endif
 #else
 	inode->i_mtime = inode->i_atime = inode->i_ctime = ei->i_crtime =
 		CURRENT_TIME_SEC;
 #endif
 	exfat_truncate_atime(&inode->i_atime);
+#endif
 	return 0;
 }
 
@@ -721,7 +748,7 @@ static int exfat_read_boot_sector(struct super_block *sb)
 	 */
 	if (p_boot->sect_size_bits < EXFAT_MIN_SECT_SIZE_BITS ||
 	    p_boot->sect_size_bits > EXFAT_MAX_SECT_SIZE_BITS) {
-		exfat_err(sb, "bogus sector size bits : %u\n",
+		exfat_err(sb, "bogus sector size bits : %u",
 				p_boot->sect_size_bits);
 		return -EINVAL;
 	}
@@ -730,7 +757,7 @@ static int exfat_read_boot_sector(struct super_block *sb)
 	 * sect_per_clus_bits could be at least 0 and at most 25 - sect_size_bits.
 	 */
 	if (p_boot->sect_per_clus_bits > EXFAT_MAX_SECT_PER_CLUS_BITS(p_boot)) {
-		exfat_err(sb, "bogus sectors bits per cluster : %u\n",
+		exfat_err(sb, "bogus sectors bits per cluster : %u",
 				p_boot->sect_per_clus_bits);
 		return -EINVAL;
 	}
@@ -896,6 +923,12 @@ static int exfat_fill_super(struct super_block *sb, void *data, int silent)
 	if (opts->allow_utime == (unsigned short)-1)
 		opts->allow_utime = ~opts->fs_dmask & 0022;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0)
+	if (opts->discard && !bdev_max_discard_sectors(sb->s_bdev)) {
+		exfat_warn(sb, "mounting with \"discard\" option, but the device does not support discard");
+		opts->discard = 0;
+	}
+#else
 	if (opts->discard) {
 		struct request_queue *q = bdev_get_queue(sb->s_bdev);
 
@@ -904,6 +937,7 @@ static int exfat_fill_super(struct super_block *sb, void *data, int silent)
 			opts->discard = 0;
 		}
 	}
+#endif
 #else
 	struct exfat_sb_info *sbi;
 
@@ -924,7 +958,7 @@ static int exfat_fill_super(struct super_block *sb, void *data, int silent)
 			DEFAULT_RATELIMIT_BURST);
 	err = parse_options(sb, data, silent, &sbi->options);
 	if (err) {
-		exfat_msg(sb, KERN_ERR, "failed to parse options");
+		exfat_err(sb, "failed to parse options");
 		goto check_nls_io;
 	}
 #endif
