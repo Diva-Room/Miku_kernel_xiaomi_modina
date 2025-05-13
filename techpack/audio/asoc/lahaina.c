@@ -42,7 +42,6 @@
 #include "lahaina-port-config.h"
 #include "msm_dailink.h"
 #include <soc/qcom/socinfo.h>
-#include "msm-common.h"
 
 #define DRV_NAME "lahaina-asoc-snd"
 #define __CHIPSET__ "LAHAINA "
@@ -134,6 +133,16 @@ enum {
 };
 
 enum {
+	PRIM_MI2S = 0,
+	SEC_MI2S,
+	TERT_MI2S,
+	QUAT_MI2S,
+	QUIN_MI2S,
+	SEN_MI2S,
+	MI2S_MAX,
+};
+
+enum {
 	WSA_CDC_DMA_RX_0 = 0,
 	WSA_CDC_DMA_RX_1,
 	RX_CDC_DMA_RX_0,
@@ -209,6 +218,33 @@ struct ext_mclk_src_info {
 	u32 clk_id;
 	u32 clk_root;
 	struct ext_mclk_gpio_info *gpio_info;
+};
+
+struct msm_asoc_mach_data {
+	struct snd_info_entry *codec_root;
+	int usbc_en2_gpio; /* used by gpio driver API */
+	int lito_v2_enabled;
+	struct device_node *dmic01_gpio_p; /* used by pinctrl API */
+	struct device_node *dmic23_gpio_p; /* used by pinctrl API */
+	struct device_node *dmic45_gpio_p; /* used by pinctrl API */
+	struct device_node *mi2s_gpio_p[MI2S_MAX]; /* used by pinctrl API */
+	atomic_t mi2s_gpio_ref_count[MI2S_MAX]; /* used by pinctrl API */
+	struct device_node *us_euro_gpio_p; /* used by pinctrl API */
+	struct pinctrl *usbc_en2_gpio_p; /* used by pinctrl API */
+	struct device_node *hph_en1_gpio_p; /* used by pinctrl API */
+	struct device_node *hph_en0_gpio_p; /* used by pinctrl API */
+	bool supports_ext_mclk;
+	struct ext_mclk_src_info *ext_mclk_srcs;
+	u32 num_ext_mclk_srcs;
+	bool is_afe_config_done;
+	struct device_node *fsa_handle;
+	struct clk *lpass_audio_hw_vote;
+	int core_audio_vote_count;
+	u32 wsa_max_devs;
+	u32 tdm_max_slots; /* Max TDM slots used */
+	int wcd_disabled;
+	int (*get_wsa_dev_num)(struct snd_soc_component*);
+	struct afe_cps_hw_intf_cfg cps_config;
 };
 
 struct tdm_port {
@@ -1976,13 +2012,13 @@ static int tdm_get_sample_rate(int value)
 		sample_rate = SAMPLING_RATE_8KHZ;
 		break;
 	case 1:
-		sample_rate = SAMPLING_RATE_11P025KHZ;
-		break;
-	case 2:
 		sample_rate = SAMPLING_RATE_16KHZ;
 		break;
+	case 2:
+		sample_rate = SAMPLING_RATE_32KHZ;
+		break;
 	case 3:
-		sample_rate = SAMPLING_RATE_22P05KHZ;
+		sample_rate = SAMPLING_RATE_48KHZ;
 		break;
 	case 4:
 		sample_rate = SAMPLING_RATE_96KHZ;
@@ -1992,9 +2028,6 @@ static int tdm_get_sample_rate(int value)
 		break;
 	case 6:
 		sample_rate = SAMPLING_RATE_352P8KHZ;
-		break;
-	case 12:
-		sample_rate = SAMPLING_RATE_384KHZ;
 		break;
 	default:
 		sample_rate = SAMPLING_RATE_48KHZ;
@@ -2011,13 +2044,13 @@ static int tdm_get_sample_rate_val(int sample_rate)
 	case SAMPLING_RATE_8KHZ:
 		sample_rate_val = 0;
 		break;
-	case SAMPLING_RATE_11P025KHZ:
+	case SAMPLING_RATE_16KHZ:
 		sample_rate_val = 1;
 		break;
-	case SAMPLING_RATE_16KHZ:
+	case SAMPLING_RATE_32KHZ:
 		sample_rate_val = 2;
 		break;
-	case SAMPLING_RATE_22P05KHZ:
+	case SAMPLING_RATE_48KHZ:
 		sample_rate_val = 3;
 		break;
 	case SAMPLING_RATE_96KHZ:
@@ -2030,7 +2063,7 @@ static int tdm_get_sample_rate_val(int sample_rate)
 		sample_rate_val = 6;
 		break;
 	default:
-		sample_rate_val = 6;
+		sample_rate_val = 3;
 		break;
 	}
 	return sample_rate_val;
