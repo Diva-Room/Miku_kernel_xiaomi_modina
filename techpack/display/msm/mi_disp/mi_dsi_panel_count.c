@@ -26,7 +26,7 @@ static char *hwmon_key_fps[FPS_MAX_NUM] = {"30fps_times", "50fps_times",
 static const u32 dynamic_fps[FPS_MAX_NUM] = {30, 50, 60, 90, 120, 144};
 
 char HWMON_CONPONENT_NAME[64];
-int index = MI_DISP_PRIMARY;
+int mi_disp_index = MI_DISP_PRIMARY;
 
 #define DAY_SECS (60*60*24)
 
@@ -35,10 +35,10 @@ void mi_dsi_panel_state_count(struct dsi_panel *panel, PANEL_COUNT_EVENT event, 
 	char ch[64] = {0};
 
 	if (!strcmp(panel->type, "primary")) {
-		index = MI_DISP_PRIMARY;
+		mi_disp_index = MI_DISP_PRIMARY;
 		strcpy(HWMON_CONPONENT_NAME, "display");
 	} else {
-		index = MI_DISP_SECONDARY;
+		mi_disp_index = MI_DISP_SECONDARY;
 		strcpy(HWMON_CONPONENT_NAME, "display2");
 	}
 
@@ -50,8 +50,8 @@ void mi_dsi_panel_state_count(struct dsi_panel *panel, PANEL_COUNT_EVENT event, 
 		static u32 off_times[MI_DISP_MAX];
 		static u64 timestamp_panelon[MI_DISP_MAX];
 		if (value && !panel->mi_count.panel_active_count_enable) {
-			timestamp_panelon[index] = get_jiffies_64();
-			on_times[index]++;
+			timestamp_panelon[mi_disp_index] = get_jiffies_64();
+			on_times[mi_disp_index]++;
 			panel->mi_count.panel_active_count_enable = true;
 		} else if (!value && panel->mi_count.panel_active_count_enable){
 			ktime_t boot_time;
@@ -59,12 +59,12 @@ void mi_dsi_panel_state_count(struct dsi_panel *panel, PANEL_COUNT_EVENT event, 
 			u64 jiffies_time = 0;
 			struct timespec rtctime;
 
-			off_times[index]++;
-			pr_info("%s: %s on_times[%llu] off_times[%llu]\n", __func__, HWMON_CONPONENT_NAME, on_times[index], off_times[index]);
+			off_times[mi_disp_index]++;
+			pr_info("%s: %s on_times[%llu] off_times[%llu]\n", __func__, HWMON_CONPONENT_NAME, on_times[mi_disp_index], off_times[mi_disp_index]);
 
 			jiffies_time = get_jiffies_64();
-			if (time_after64(jiffies_time, timestamp_panelon[index]))
-				panel->mi_count.panel_active += (jiffies_time - timestamp_panelon[index]);
+			if (time_after64(jiffies_time, timestamp_panelon[mi_disp_index]))
+				panel->mi_count.panel_active += (jiffies_time - timestamp_panelon[mi_disp_index]);
 			memset(ch, 0, sizeof(ch));
 			snprintf(ch, sizeof(ch), "%llu", panel->mi_count.panel_active / HZ);
 			update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_ACTIVE, ch);
@@ -116,27 +116,27 @@ void mi_dsi_panel_state_count(struct dsi_panel *panel, PANEL_COUNT_EVENT event, 
 
 		bl_level_end = get_jiffies_64();
 
-		if (last_bl_start[index] == 0) {
-			last_bl_lvl[index] = value;
-			last_bl_start[index] = bl_level_end;
+		if (last_bl_start[mi_disp_index] == 0) {
+			last_bl_lvl[mi_disp_index] = value;
+			last_bl_start[mi_disp_index] = bl_level_end;
 			return;
 		}
 
-		if (last_bl_lvl[index] > 0) {
-			panel->mi_count.bl_level_integral += last_bl_lvl[index] * (bl_level_end - last_bl_start[index]);
-			panel->mi_count.bl_duration += (bl_level_end - last_bl_start[index]);
+		if (last_bl_lvl[mi_disp_index] > 0) {
+			panel->mi_count.bl_level_integral += last_bl_lvl[mi_disp_index] * (bl_level_end - last_bl_start[mi_disp_index]);
+			panel->mi_count.bl_duration += (bl_level_end - last_bl_start[mi_disp_index]);
 		}
 
 		/* backlight level 2047*0.75 ==> 1535 */
-		if (last_bl_lvl[index] > 1535) {
-			panel->mi_count.bl_highlevel_duration += (bl_level_end - last_bl_start[index]);
-		} else if (last_bl_lvl[index] > 0) {
+		if (last_bl_lvl[mi_disp_index] > 1535) {
+			panel->mi_count.bl_highlevel_duration += (bl_level_end - last_bl_start[mi_disp_index]);
+		} else if (last_bl_lvl[mi_disp_index] > 0) {
 		/* backlight level (0, 1535] */
-		panel->mi_count.bl_lowlevel_duration += (bl_level_end - last_bl_start[index]);
+		panel->mi_count.bl_lowlevel_duration += (bl_level_end - last_bl_start[mi_disp_index]);
 		}
 
-		last_bl_lvl[index] = value;
-		last_bl_start[index] = bl_level_end;
+		last_bl_lvl[mi_disp_index] = value;
+		last_bl_start[mi_disp_index] = bl_level_end;
 
 		if (value == 0) {
 			memset(ch, 0, sizeof(ch));
@@ -162,18 +162,18 @@ void mi_dsi_panel_state_count(struct dsi_panel *panel, PANEL_COUNT_EVENT event, 
 		static int enter_flag[MI_DISP_MAX] = {[0 ... MI_DISP_MAX-1] = 1};
 		static int exit_flag[MI_DISP_MAX] = {0};
 
-		if (value > panel->mi_cfg.hbm_backlight_threshold && enter_flag[index]) {
-			time_hbm_on[index] = get_jiffies_64();
-			enter_flag[index] = 0;
-			exit_flag[index] = 1;
-		} else if (value <= panel->mi_cfg.hbm_backlight_threshold && exit_flag[index]) {
+		if (value > panel->mi_cfg.hbm_backlight_threshold && enter_flag[mi_disp_index]) {
+			time_hbm_on[mi_disp_index] = get_jiffies_64();
+			enter_flag[mi_disp_index] = 0;
+			exit_flag[mi_disp_index] = 1;
+		} else if (value <= panel->mi_cfg.hbm_backlight_threshold && exit_flag[mi_disp_index]) {
 			time_hbm_off = get_jiffies_64();
-			if (time_after64(time_hbm_off, time_hbm_on[index])) {
-				panel->mi_count.hbm_duration += (time_hbm_off-time_hbm_on[index]);
+			if (time_after64(time_hbm_off, time_hbm_on[mi_disp_index])) {
+				panel->mi_count.hbm_duration += (time_hbm_off-time_hbm_on[mi_disp_index]);
 				panel->mi_count.hbm_times++;
 			}
-			enter_flag[index] = 1;
-			exit_flag[index] = 0;
+			enter_flag[mi_disp_index] = 1;
+			exit_flag[mi_disp_index] = 0;
 
 			memset(ch, 0, sizeof(ch));
 			snprintf(ch, sizeof(ch), "%llu", panel->mi_count.hbm_duration / HZ);
@@ -198,24 +198,24 @@ void mi_dsi_panel_state_count(struct dsi_panel *panel, PANEL_COUNT_EVENT event, 
 				break;
 		}
 
-		if (first_into_flag[index]) {
-			timestamp_fps[index] = get_jiffies_64();
-			first_into_flag[index] = false;
-			cur_fps_index[index] = change_fps_index;
+		if (first_into_flag[mi_disp_index]) {
+			timestamp_fps[mi_disp_index] = get_jiffies_64();
+			first_into_flag[mi_disp_index] = false;
+			cur_fps_index[mi_disp_index] = change_fps_index;
 			return;
 		}
 
-		if (change_fps_index != cur_fps_index[index]) {
+		if (change_fps_index != cur_fps_index[mi_disp_index]) {
 			jiffies_time = get_jiffies_64();
-			if (cur_fps_index[index] != FPS_MAX_NUM) {
-				if (time_after64(jiffies_time, timestamp_fps[index]))
-					panel->mi_count.fps_times[cur_fps_index[index]] += (jiffies_time - timestamp_fps[index]);
-				snprintf(ch, sizeof(ch), "%llu", panel->mi_count.fps_times[cur_fps_index[index]] / HZ);
-				update_hw_monitor_info(HWMON_CONPONENT_NAME, hwmon_key_fps[cur_fps_index[index]], ch);
+			if (cur_fps_index[mi_disp_index] != FPS_MAX_NUM) {
+				if (time_after64(jiffies_time, timestamp_fps[mi_disp_index]))
+					panel->mi_count.fps_times[cur_fps_index[mi_disp_index]] += (jiffies_time - timestamp_fps[mi_disp_index]);
+				snprintf(ch, sizeof(ch), "%llu", panel->mi_count.fps_times[cur_fps_index[mi_disp_index]] / HZ);
+				update_hw_monitor_info(HWMON_CONPONENT_NAME, hwmon_key_fps[cur_fps_index[mi_disp_index]], ch);
 			}
-			timestamp_fps[index] = get_jiffies_64();
+			timestamp_fps[mi_disp_index] = get_jiffies_64();
 		}
-		cur_fps_index[index] = change_fps_index;
+		cur_fps_index[mi_disp_index] = change_fps_index;
 	}
 	break;
 	default:
@@ -233,25 +233,25 @@ void mi_dsi_panel_HBM_count(struct dsi_panel *panel, int enable, int off)
 	bool record = false;
 
 	if (!strcmp(panel->type, "primary")) {
-		index = MI_DISP_PRIMARY;
+		mi_disp_index = MI_DISP_PRIMARY;
 		strcpy(HWMON_CONPONENT_NAME, "display");
 	} else {
-		index = MI_DISP_SECONDARY;
+		mi_disp_index = MI_DISP_SECONDARY;
 		strcpy(HWMON_CONPONENT_NAME, "display2");
 	}
 
 	pr_info("%s, hbm_times[%lld],en[%d] off[%d]\n", HWMON_CONPONENT_NAME, panel->mi_count.hbm_times, enable, off);
 
 	if (off) {
-		if (last_HBM_status[index] == 1)
+		if (last_HBM_status[mi_disp_index] == 1)
 			record = true;
 	} else {
 		if (enable) {
-			if (!last_HBM_status[index]) {
+			if (!last_HBM_status[mi_disp_index]) {
 				/* get HBM on timestamp */
-				timestamp_hbmon[index] = get_jiffies_64();
+				timestamp_hbmon[mi_disp_index] = get_jiffies_64();
 			}
-		} else if (last_HBM_status[index]){
+		} else if (last_HBM_status[mi_disp_index]){
 			record = true;
 		}
 	}
@@ -259,8 +259,8 @@ void mi_dsi_panel_HBM_count(struct dsi_panel *panel, int enable, int off)
 	if (record) {
 		/* caculate panel hbm duration */
 		jiffies_time = get_jiffies_64();
-		if (time_after64(jiffies_time, timestamp_hbmon[index]))
-			panel->mi_count.hbm_duration += (jiffies_time - timestamp_hbmon[index]) / HZ;
+		if (time_after64(jiffies_time, timestamp_hbmon[mi_disp_index]))
+			panel->mi_count.hbm_duration += (jiffies_time - timestamp_hbmon[mi_disp_index]) / HZ;
 		snprintf(ch, sizeof(ch), "%llu", panel->mi_count.hbm_duration);
 		update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_HBM_DRUATION, ch);
 
@@ -271,7 +271,7 @@ void mi_dsi_panel_HBM_count(struct dsi_panel *panel, int enable, int off)
 		update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_HBM_TIMES, ch);
 	}
 
-	last_HBM_status[index] = enable;
+	last_HBM_status[mi_disp_index] = enable;
 
 	return;
 }
@@ -285,23 +285,23 @@ void mi_dsi_panel_HBM_count_bl(struct dsi_panel *panel, u32 bl_lvl)
 	static int exit_flag[MI_DISP_MAX] = {0,0};
 
 	if (!strcmp(panel->type, "primary")) {
-		index = MI_DISP_PRIMARY;
+		mi_disp_index = MI_DISP_PRIMARY;
 		strcpy(HWMON_CONPONENT_NAME, "display");
 	} else {
-		index = MI_DISP_SECONDARY;
+		mi_disp_index = MI_DISP_SECONDARY;
 		strcpy(HWMON_CONPONENT_NAME, "display2");
 	}
-	if(bl_lvl > panel->mi_cfg.hbm_backlight_threshold && enter_flag[index]) {
-		time_hbm_on[index] = get_jiffies_64();
-		enter_flag[index] = 0;
-		exit_flag[index] = 1;
-	} else if (bl_lvl <= panel->mi_cfg.hbm_backlight_threshold && exit_flag[index]) {
-		time_hbm_off[index] = get_jiffies_64();
-		if (time_after64(time_hbm_off[index], time_hbm_on[index])) {
-			panel->mi_count.hbm_duration += (time_hbm_off[index] - time_hbm_on[index]) / HZ;
+	if(bl_lvl > panel->mi_cfg.hbm_backlight_threshold && enter_flag[mi_disp_index]) {
+		time_hbm_on[mi_disp_index] = get_jiffies_64();
+		enter_flag[mi_disp_index] = 0;
+		exit_flag[mi_disp_index] = 1;
+	} else if (bl_lvl <= panel->mi_cfg.hbm_backlight_threshold && exit_flag[mi_disp_index]) {
+		time_hbm_off[mi_disp_index] = get_jiffies_64();
+		if (time_after64(time_hbm_off[mi_disp_index], time_hbm_on[mi_disp_index])) {
+			panel->mi_count.hbm_duration += (time_hbm_off[mi_disp_index] - time_hbm_on[mi_disp_index]) / HZ;
 			panel->mi_count.hbm_times++;
-			enter_flag[index] = 1;
-			exit_flag[index] = 0;
+			enter_flag[mi_disp_index] = 1;
+			exit_flag[mi_disp_index] = 0;
 		}
 	}
 
@@ -327,36 +327,36 @@ void mi_dsi_panel_backlight_count(struct dsi_panel *panel, u32 bl_lvl)
 	char ch[64] = {0};
 
 	if (!strcmp(panel->type, "primary")) {
-		index = MI_DISP_PRIMARY;
+		mi_disp_index = MI_DISP_PRIMARY;
 		strcpy(HWMON_CONPONENT_NAME, "display");
 	} else {
-		index = MI_DISP_SECONDARY;
+		mi_disp_index = MI_DISP_SECONDARY;
 		strcpy(HWMON_CONPONENT_NAME, "display2");
 	}
 
 	bl_level_end = get_jiffies_64();
 
-	if (last_bl_start[index] == 0) {
-		last_bl_level[index] = bl_lvl;
-		last_bl_start[index] = bl_level_end;
+	if (last_bl_start[mi_disp_index] == 0) {
+		last_bl_level[mi_disp_index] = bl_lvl;
+		last_bl_start[mi_disp_index] = bl_level_end;
 		return;
 	}
 
-	if (last_bl_level[index] > 0) {
-		panel->mi_count.bl_level_integral += last_bl_level[index] * (bl_level_end - last_bl_start[index]);
-		panel->mi_count.bl_duration += (bl_level_end - last_bl_start[index]);
+	if (last_bl_level[mi_disp_index] > 0) {
+		panel->mi_count.bl_level_integral += last_bl_level[mi_disp_index] * (bl_level_end - last_bl_start[mi_disp_index]);
+		panel->mi_count.bl_duration += (bl_level_end - last_bl_start[mi_disp_index]);
 	}
 
 	/* backlight level 2047*0.75 ==> 1535 */
-	if (last_bl_level[index] > 1535) {
-		panel->mi_count.bl_highlevel_duration += (bl_level_end - last_bl_start[index]);
-	} else if (last_bl_level[index] > 0) {
+	if (last_bl_level[mi_disp_index] > 1535) {
+		panel->mi_count.bl_highlevel_duration += (bl_level_end - last_bl_start[mi_disp_index]);
+	} else if (last_bl_level[mi_disp_index] > 0) {
 		/* backlight level (0, 1535] */
-		panel->mi_count.bl_lowlevel_duration += (bl_level_end - last_bl_start[index]);
+		panel->mi_count.bl_lowlevel_duration += (bl_level_end - last_bl_start[mi_disp_index]);
 	}
 
-	last_bl_level[index] = bl_lvl;
-	last_bl_start[index] = bl_level_end;
+	last_bl_level[mi_disp_index] = bl_lvl;
+	last_bl_start[mi_disp_index] = bl_level_end;
 
 	if (bl_lvl == 0) {
 		memset(ch, 0, sizeof(ch));
@@ -388,18 +388,18 @@ void mi_dsi_panel_fps_count(struct dsi_panel *panel, u32 fps, u32 enable)
 	char ch[64] = {0};
 
 	if (!strcmp(panel->type, "primary")) {
-		index = MI_DISP_PRIMARY;
+		mi_disp_index = MI_DISP_PRIMARY;
 		strcpy(HWMON_CONPONENT_NAME, "display");
 	} else {
-		index = MI_DISP_SECONDARY;
+		mi_disp_index = MI_DISP_SECONDARY;
 		strcpy(HWMON_CONPONENT_NAME, "display2");
 	}
 
-	if (!panel || (!enable && timming_index[index] == FPS_MAX_NUM))
+	if (!panel || (!enable && timming_index[mi_disp_index] == FPS_MAX_NUM))
 		return;
 
 	if (enable && !fps)
-		fps = cur_fps[index];
+		fps = cur_fps[mi_disp_index];
 
 	for(i = 0; i < FPS_MAX_NUM; i++) {
 		if (fps == dynamic_fps[i])
@@ -407,20 +407,20 @@ void mi_dsi_panel_fps_count(struct dsi_panel *panel, u32 fps, u32 enable)
 	}
 
 	if (i < FPS_MAX_NUM || !fps) {
-		if (i != timming_index[index] && timming_index[index] < FPS_MAX_NUM) {
+		if (i != timming_index[mi_disp_index] && timming_index[mi_disp_index] < FPS_MAX_NUM) {
 			jiffies_time = get_jiffies_64();
-			if (time_after64(jiffies_time, timestamp_fps[index]))
-				panel->mi_count.fps_times[timming_index[index]] += (jiffies_time - timestamp_fps[index]) / HZ;
-			snprintf(ch, sizeof(ch), "%llu", panel->mi_count.fps_times[timming_index[index]]);
-			update_hw_monitor_info(HWMON_CONPONENT_NAME, hwmon_key_fps[timming_index[index]], ch);
-			timestamp_fps[index] = jiffies_time;
-		} else if (timming_index[index] == FPS_MAX_NUM)
-			timestamp_fps[index] = get_jiffies_64();
+			if (time_after64(jiffies_time, timestamp_fps[mi_disp_index]))
+				panel->mi_count.fps_times[timming_index[mi_disp_index]] += (jiffies_time - timestamp_fps[mi_disp_index]) / HZ;
+			snprintf(ch, sizeof(ch), "%llu", panel->mi_count.fps_times[timming_index[mi_disp_index]]);
+			update_hw_monitor_info(HWMON_CONPONENT_NAME, hwmon_key_fps[timming_index[mi_disp_index]], ch);
+			timestamp_fps[mi_disp_index] = jiffies_time;
+		} else if (timming_index[mi_disp_index] == FPS_MAX_NUM)
+			timestamp_fps[mi_disp_index] = get_jiffies_64();
 
-		timming_index[index] = i;
+		timming_index[mi_disp_index] = i;
 	}
 
-	cur_fps[index] = fps ? fps : cur_fps[index];
+	cur_fps[mi_disp_index] = fps ? fps : cur_fps[mi_disp_index];
 }
 
 void mi_dsi_panel_fps_count_lock(struct dsi_panel *panel, u32 fps, u32 enable)
@@ -437,10 +437,10 @@ void mi_dsi_panel_count_init(struct dsi_panel *panel)
 {
 	int i = 0;
 	if (!strcmp(panel->type, "primary")) {
-		index = MI_DISP_PRIMARY;
+		mi_disp_index = MI_DISP_PRIMARY;
 		strcpy(HWMON_CONPONENT_NAME, "display");
 	} else {
-		index = MI_DISP_SECONDARY;
+		mi_disp_index = MI_DISP_SECONDARY;
 		strcpy(HWMON_CONPONENT_NAME, "display2");
 	}
 
@@ -504,10 +504,10 @@ int mi_dsi_panel_set_disp_count(struct dsi_panel *panel, const char *buf)
 	}
 
 	// if (!strcmp(panel->type, "primary")) {
-	// 	index = MI_DISP_PRIMARY;
+	// 	mi_disp_index = MI_DISP_PRIMARY;
 	// 	strcpy(HWMON_CONPONENT_NAME, "display");
 	// } else {
-	// 	index = MI_DISP_SECONDARY;
+	// 	mi_disp_index = MI_DISP_SECONDARY;
 	// 	strcpy(HWMON_CONPONENT_NAME, "display2");
 	// }
 
