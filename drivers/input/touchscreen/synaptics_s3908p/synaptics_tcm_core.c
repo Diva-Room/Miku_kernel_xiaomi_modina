@@ -5488,7 +5488,7 @@ static const struct file_operations tpdbg_operations = {
 #endif
 
 #ifdef SYNAPTICS_POWERSUPPLY_CB
-static int syna_tcm_get_charging_status()
+static int syna_tcm_get_charging_status(void)
 {
 #ifdef CONFIG_QGKI_SYSTEM
 	int is_charging = 0;
