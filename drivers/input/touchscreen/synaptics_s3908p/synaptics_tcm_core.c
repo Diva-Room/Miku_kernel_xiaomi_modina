@@ -5365,15 +5365,12 @@ static ssize_t tp_irq_debug_write(struct file *file, const char __user *buf,
 {
 	int retval = 0;
 	char tmp[1];
-	int ret;
 
 	if (copy_from_user(tmp, buf, 1)) {
 		pr_err("%s: copy_from_user data fail\n", __func__);
 		retval = -EFAULT;
 	}
-	ret = (int)&tmp;
-	pr_err("%s: ret = %d\n", __func__, ret);
-	if(ret)
+	if(retval)
 		disable_irq(gloab_tcm_hcd->irq);
 	else
 		enable_irq(gloab_tcm_hcd->irq);
