@@ -5601,7 +5601,7 @@ static ssize_t syna_tcm_lockdown_info_read(struct file *file, char __user *buf,
 	}
 
 	cnt =
-		snprintf(tmp, PAGE_SIZE,
+		snprintf(tmp, TP_INFO_MAX_LENGTH,
 			 "OEM_INFO: 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x\n",
 			 tcm_hcd->lockdown_info[0], tcm_hcd->lockdown_info[1],
 			 tcm_hcd->lockdown_info[2], tcm_hcd->lockdown_info[3],
