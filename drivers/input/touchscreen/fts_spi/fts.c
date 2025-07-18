@@ -1250,11 +1250,11 @@ static ssize_t stm_fts_cmd_show(struct device *dev,
 #if defined(CONFIG_DRM)
 	if (active_panel)
 		res = drm_panel_notifier_unregister(active_panel, &info->notifier);
-		if (res < 0) {
-			logError(1, "%s ERROR: unregister notifier failed!\n",
-				 tag);
-			goto END;
-		}
+	if (res < 0) {
+		logError(1, "%s ERROR: unregister notifier failed!\n",
+			 tag);
+		goto END;
+	}
 #endif
 		switch (typeOfComand[0]) {
 			/*ITO TEST */
